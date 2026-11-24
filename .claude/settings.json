@@ -3,7 +3,11 @@
     "deny": [
       "Edit(./tests/invariants/**)",
       "Write(./tests/invariants/**)",
-      "NotebookEdit(./tests/invariants/**)"
+      "NotebookEdit(./tests/invariants/**)",
+      "Read(./.env)",
+      "Read(./**/.env)",
+      "Edit(./.env)",
+      "Write(./.env)"
     ]
   },
   "hooks": {
@@ -14,6 +18,10 @@
           {
             "type": "command",
             "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .claude/hooks/protect-invariants.ps1"
+          },
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .claude/hooks/protect-env.ps1"
           }
         ]
       }
