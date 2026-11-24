@@ -24,7 +24,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -NonInteractive -Command \"(New-Object System.Media.SoundPlayer 'C:\\WINDOWS\\Media\\Windows Notify System Generic.wav').PlaySync()\""
+            "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .claude/hooks/notify.ps1"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .claude/hooks/notify.ps1"
           }
         ]
       }
