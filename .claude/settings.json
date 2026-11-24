@@ -1,5 +1,23 @@
 {
+  "permissions": {
+    "deny": [
+      "Edit(./tests/invariants/**)",
+      "Write(./tests/invariants/**)",
+      "NotebookEdit(./tests/invariants/**)"
+    ]
+  },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .claude/hooks/protect-invariants.ps1"
+          }
+        ]
+      }
+    ],
     "Notification": [
       {
         "matcher": "",
@@ -7,6 +25,17 @@
           {
             "type": "command",
             "command": "powershell.exe -NoProfile -NonInteractive -Command \"(New-Object System.Media.SoundPlayer 'C:\\WINDOWS\\Media\\Windows Notify System Generic.wav').PlaySync()\""
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -NonInteractive -Command \"[Console]::OutputEncoding=[Text.Encoding]::UTF8; if (Test-Path planning/STATE.md) { Get-Content -Raw -Encoding UTF8 planning/STATE.md }\""
           }
         ]
       }
