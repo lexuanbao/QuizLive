@@ -41,6 +41,22 @@ def test_tra_loi_lan_hai_tra_409_va_diem_khong_doi(client, db_file):
     assert you["answered_current"] is True
 
 
+def test_bang_diem_thi_dong_hang(client, db_file):
+    room, tokens, question = _started(client, ("Nam", "Lan", "Hoa"))
+    code, qid = room["code"], question["id"]
+    right = correct_index(db_file, qid)
+
+    set_opened_at(db_file, qid, 3)
+    for name, choice in (("Nam", right), ("Lan", right), ("Hoa", (right + 1) % 4)):
+        assert answer(client, code, tokens[name], qid, choice).status_code == 200
+
+    board = state(client, code, "host", room["host_token"])["leaderboard"]
+    points = scoring.points_for(True, 3)
+    assert [(e["score"], e["rank"]) for e in board] == [(points, 1), (points, 1), (0, 3)]
+    assert state(client, code, "player", tokens["Lan"])["you"]["rank"] == 1
+    assert state(client, code, "player", tokens["Hoa"])["you"]["rank"] == 3
+
+
 def test_het_gio_request_tiep_theo_thay_reveal_va_tra_loi_bi_409(client, db_file):
     room, tokens, question = _started(client)
     code, qid = room["code"], question["id"]

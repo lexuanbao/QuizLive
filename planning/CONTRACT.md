@@ -68,7 +68,8 @@ hai hoặc trả lời khi câu đã đóng hoặc nickname trùng, `422` sai d�
 - `question` là `null` khi `status` là `lobby` hoặc `finished`.
 - `reveal` chỉ có giá trị khi `status` là `reveal` hoặc `finished`:
   `{"correct_index": 2, "explanation": "..."}`.
-- `leaderboard`: tối đa 10 người, tính từ `answers`.
+- `leaderboard`: tối đa 10 người, tính từ `answers`. Bằng điểm thì đồng hạng
+  (600, 300, 300, 100 -> hạng 1, 2, 2, 4); `you.rank` theo cùng luật.
 - Thêm cho `role=host`: `"players": ["Nam", "Lan"]`, `"answered": 3`.
 - Thêm cho `role=player`: `"you": {"score": 0, "rank": 1, "answered_current": false}`.
 

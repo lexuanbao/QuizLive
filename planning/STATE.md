@@ -1,9 +1,9 @@
 # Trạng thái hiện tại
 
-Đang ở: Bước 3 — sóng 2 và 3 xong về code, chờ chơi thử trên trình duyệt thật
-Đã xong: sóng 0, 1, 2 (màn hình host và người chơi), 3 (`tests/game/`); 110 test xanh
-Đang làm: người thật chơi thử một ván (máy chiếu + điện thoại) để chốt sóng 2
-Quyết định vừa chốt: bằng điểm vẫn xếp hạng khác nhau (1, 2) vì SPEC không quy định; chờ người dùng quyết
+Đang ở: Bước 4 — cả 4 sóng xong; người dùng đã chơi thử trên trình duyệt và thấy ổn
+Đã xong: sóng 0, 1, 2, 3; 111 test xanh
+Đang làm: chưa có việc mở
+Quyết định vừa chốt: bằng điểm thì đồng hạng (1, 2, 2, 4), đã ghi vào CONTRACT
 
 ---
 
@@ -24,6 +24,18 @@ cho lead, lead ghi lại. Nhiều agent cùng sửa một file sẽ ghi đè lê
 | 3 | Người 6 | Test chơi trọn ván qua API | `tests/game/` xanh |
 
 ## Nhật ký
+
+### 2026-11-24 — lead — chốt sóng 2, đồng hạng, hook âm thanh
+Đã làm: người dùng chơi thử một ván trên trình duyệt, ổn — sóng 2 xong.
+`views._ranks` cho đồng hạng khi bằng điểm, dùng cho cả `leaderboard` và
+`you.rank`; sửa 4 assert trong `tests/unit/test_views.py` theo luật mới, thêm
+`test_bang_diem_thi_dong_hang` trong `tests/game/`. `pytest tests`: 111 passed.
+Hook Notification và Stop dùng `.claude/hooks/notify.ps1` phát `ting.wav` /
+`done.wav` bằng WPF MediaPlayer, ghi `.claude/hooks/notify.log` (gitignore).
+Quyết định: đồng hạng kiểu thi đấu (1, 2, 2, 4), thứ tự hiển thị trong cùng
+hạng vẫn theo `joined_at` rồi `nickname`. Ghi vào CONTRACT.
+Người tiếp theo cần biết: trên máy này SoundPlayer và WMPlayer COM không ra
+loa, chỉ WPF MediaPlayer chạy ở tiến trình riêng với `-Wait` là nghe được.
 
 ### 2026-11-24 — lead — sóng 2 và 3 (3 agent song song)
 Đã làm: lead viết trước `app.js` (api, poll, store, el, show) và `style.css`

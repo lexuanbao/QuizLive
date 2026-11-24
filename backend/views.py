@@ -33,6 +33,19 @@ def _ranking(
     return connection.execute(sql, params).fetchall()
 
 
+def _ranks(rows: list[sqlite3.Row]) -> list[int]:
+    """Bằng điểm thì đồng hạng: 600, 300, 300, 100 -> 1, 2, 2, 4.
+
+    `rows` đã sắp theo điểm giảm dần, nên hạng = vị trí của người đầu tiên
+    có cùng điểm.
+    """
+    ranks: list[int] = []
+    for position, row in enumerate(rows, start=1):
+        same = ranks and int(row["score"]) == int(rows[position - 2]["score"])
+        ranks.append(ranks[-1] if same else position)
+    return ranks
+
+
 def leaderboard(room_code: str) -> list[dict]:
     """Tối đa 10 người, điểm luôn tính lại từ answers (INV-1)."""
     connection = db.connect()
@@ -43,7 +56,7 @@ def leaderboard(room_code: str) -> list[dict]:
 
     return [
         {"nickname": row["nickname"], "score": int(row["score"]), "rank": rank}
-        for rank, row in enumerate(rows, start=1)
+        for rank, row in zip(_ranks(rows), rows)
     ]
 
 
@@ -96,7 +109,7 @@ def _you(
 ) -> dict:
     """Điểm và hạng của một người chơi, hạng tính trên toàn bộ phòng."""
     rows = _ranking(connection, room_code)
-    for rank, row in enumerate(rows, start=1):
+    for rank, row in zip(_ranks(rows), rows):
         if row["id"] == player_id:
             return {
                 "score": int(row["score"]),

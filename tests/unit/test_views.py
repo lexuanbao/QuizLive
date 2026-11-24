@@ -190,7 +190,8 @@ def test_leaderboard_tinh_tu_answers_va_gioi_han_10(seeded):
     board = views.leaderboard(CODE)
 
     assert len(board) == 10
-    assert [entry["rank"] for entry in board] == list(range(1, 11))
+    # Bằng điểm thì đồng hạng: hai người 300 cùng hạng 3, người sau là hạng 5.
+    assert [entry["rank"] for entry in board] == [1, 2, 3, 3, 5, 6, 7, 8, 9, 10]
     assert [entry["score"] for entry in board] == [
         600, 400, 300, 300, 250, 200, 150, 100, 50, 0
     ]
@@ -222,7 +223,8 @@ def test_leaderboard_hoa_diem_theo_joined_at_roi_nickname(database):
 
     board = views.leaderboard("XYZ234")
     assert [entry["nickname"] for entry in board] == ["Bình", "An", "Người 03"]
-    assert [entry["rank"] for entry in board] == [1, 2, 3]
+    # Thứ tự hiển thị theo joined_at, nhưng cùng 0 điểm nên cùng hạng 1.
+    assert [entry["rank"] for entry in board] == [1, 1, 1]
     assert all(entry["score"] == 0 for entry in board)
 
 
@@ -272,8 +274,8 @@ def test_state_question_player(seeded, fake_game):
     last = views.build_state(CODE, "player", "tok12")
 
     assert first["you"] == {"score": 600, "rank": 1, "answered_current": True}
-    # Hạng của người chơi không bị giới hạn 10 như leaderboard.
-    assert last["you"] == {"score": 0, "rank": 12, "answered_current": False}
+    # Hạng tính trên cả phòng; Người 10, 11, 12 cùng 0 điểm nên đồng hạng 10.
+    assert last["you"] == {"score": 0, "rank": 10, "answered_current": False}
     assert len(first["leaderboard"]) == 10
     assert "players" not in first
     assert "answered" not in first
@@ -315,7 +317,7 @@ def test_state_finished_dung_cau_cuoi(seeded, fake_game):
     assert state["status"] == "finished"
     assert state["question"] is None
     assert state["reveal"] == {"correct_index": 0, "explanation": "Giải thích 4"}
-    assert state["you"]["rank"] == 12
+    assert state["you"]["rank"] == 10
 
 
 def test_state_goi_advance_if_due_truoc_get_room(seeded, fake_game):
