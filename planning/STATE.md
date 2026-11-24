@@ -25,6 +25,22 @@ cho lead, lead ghi lại. Nhiều agent cùng sửa một file sẽ ghi đè lê
 
 ## Nhật ký
 
+### 2026-11-25 — lead — AI thật, chặn .env, leak-hunter
+Đã làm: `backend/app.py` nạp `.env` bằng `load_dotenv` (không ghi đè biến
+đã đặt, test mock vẫn thắng); thử thật với OpenRouter: 201 sau 7,4 giây, 5 câu
+đúng chủ đề nhưng model mặc định có câu sai kiến thức. Chặn Claude đọc/sửa
+`.env` bằng deny rule và hook `.claude/hooks/protect-env.ps1`. Tạo sub-agent
+`.claude/agents/leak-hunter.md` (Read/Grep/Glob, haiku). Leak-hunter tìm ra:
+điểm cộng ngay khi trả lời nên `/state` lộ ai vừa đúng khi câu còn mở — đã tái
+hiện và sửa trong `views._RANKING_SQL` (bỏ điểm câu đang mở). Chạy lại
+leak-hunter: chỉ ra race (SQL đọc lại status) — sửa bằng cách truyền chỉ số câu
+mở từ cùng lần đọc phòng với `status` trả về. `pytest tests` 113 passed;
+`REQUIRE_INVARIANTS=1` 3 passed. Leak-hunter còn ghi: mock không xáo lựa chọn
+(đáp án cố định theo vị trí, chỉ là rủi ro khi demo bằng mock).
+Quyết định: ẩn điểm câu đang mở thay vì hoãn ghi điểm; ghi vào CONTRACT.
+Người tiếp theo cần biết: agent mới trong `.claude/agents/` chỉ dùng được từ
+phiên sau. Nên chọn `QUIZ_MODEL` mạnh hơn mặc định `openai/gpt-4o-mini`.
+
 ### 2026-11-24 — lead — chốt sóng 2, đồng hạng, hook âm thanh
 Đã làm: người dùng chơi thử một ván trên trình duyệt, ổn — sóng 2 xong.
 `views._ranks` cho đồng hạng khi bằng điểm, dùng cho cả `leaderboard` và

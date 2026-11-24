@@ -10,9 +10,15 @@ from backend import db, game
 TOP = 10
 
 # Cùng một thứ tự sắp xếp cho bảng xếp hạng và cho hạng của từng người chơi.
+# Không cộng điểm của câu đang mở: nếu cộng ngay, ai cũng thấy người nào vừa
+# trả lời đúng trước khi reveal (lộ đáp án, trái tinh thần INV-3).
+# Chỉ số câu đang mở được truyền vào (-1 nếu không có) từ trạng thái phòng mà
+# phản hồi trả về, không đọc lại trong SQL — tránh race khi câu vừa đóng.
 _RANKING_SQL = (
     "SELECT p.id, p.nickname, COALESCE(SUM(a.points), 0) AS score "
     "FROM players p LEFT JOIN answers a ON a.player_id = p.id "
+    "AND a.question_id NOT IN "
+    "(SELECT q.id FROM questions q WHERE q.room_code = p.room_code AND q.idx = ?) "
     "WHERE p.room_code = ? "
     "GROUP BY p.id "
     "ORDER BY score DESC, p.joined_at ASC, p.nickname ASC"
@@ -25,12 +31,30 @@ _QUESTION_SQL = (
 )
 
 
+def _open_index(room) -> int:
+    """Chỉ số câu đang mở theo một lần đọc phòng, -1 nếu không có câu mở."""
+    return int(room["current_index"]) if room["status"] == "question" else -1
+
+
 def _ranking(
-    connection: sqlite3.Connection, room_code: str, limit: int | None = None
+    connection: sqlite3.Connection,
+    room_code: str,
+    open_index: int,
+    limit: int | None = None,
 ) -> list[sqlite3.Row]:
     sql = _RANKING_SQL if limit is None else f"{_RANKING_SQL} LIMIT ?"
-    params = (room_code,) if limit is None else (room_code, limit)
+    params = (open_index, room_code) + (() if limit is None else (limit,))
     return connection.execute(sql, params).fetchall()
+
+
+def _leaderboard(
+    connection: sqlite3.Connection, room_code: str, open_index: int
+) -> list[dict]:
+    rows = _ranking(connection, room_code, open_index, TOP)
+    return [
+        {"nickname": row["nickname"], "score": int(row["score"]), "rank": rank}
+        for rank, row in zip(_ranks(rows), rows)
+    ]
 
 
 def _ranks(rows: list[sqlite3.Row]) -> list[int]:
@@ -50,14 +74,13 @@ def leaderboard(room_code: str) -> list[dict]:
     """Tối đa 10 người, điểm luôn tính lại từ answers (INV-1)."""
     connection = db.connect()
     try:
-        rows = _ranking(connection, room_code, TOP)
+        room = connection.execute(
+            "SELECT status, current_index FROM rooms WHERE code = ?", (room_code,)
+        ).fetchone()
+        open_index = _open_index(room) if room is not None else -1
+        return _leaderboard(connection, room_code, open_index)
     finally:
         connection.close()
-
-    return [
-        {"nickname": row["nickname"], "score": int(row["score"]), "rank": rank}
-        for rank, row in zip(_ranks(rows), rows)
-    ]
 
 
 def _question_row(
@@ -106,9 +129,10 @@ def _you(
     room_code: str,
     player_id: str,
     answered_current: bool,
+    open_index: int,
 ) -> dict:
     """Điểm và hạng của một người chơi, hạng tính trên toàn bộ phòng."""
-    rows = _ranking(connection, room_code)
+    rows = _ranking(connection, room_code, open_index)
     for rank, row in zip(_ranks(rows), rows):
         if row["id"] == player_id:
             return {
@@ -132,6 +156,8 @@ def build_state(code: str, role: str, token: str | None) -> dict:
 
     status = room["status"]
     index = int(room["current_index"])
+    # Mọi phần điểm dùng cùng trạng thái này với "status" trả về.
+    open_index = _open_index(room)
 
     connection = db.connect()
     try:
@@ -172,7 +198,10 @@ def build_state(code: str, role: str, token: str | None) -> dict:
             extra["players"] = _player_names(connection, code)
             extra["answered"] = answered
         elif role == "player" and player is not None:
-            extra["you"] = _you(connection, code, player["id"], answered_current)
+            extra["you"] = _you(
+                connection, code, player["id"], answered_current, open_index
+            )
+        board = _leaderboard(connection, code, open_index)
     finally:
         connection.close()
 
@@ -180,7 +209,7 @@ def build_state(code: str, role: str, token: str | None) -> dict:
         "status": status,
         "question": question,
         "reveal": reveal,
-        "leaderboard": leaderboard(code),
+        "leaderboard": board,
     }
     state.update(extra)
     return state

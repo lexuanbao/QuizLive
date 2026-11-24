@@ -192,10 +192,11 @@ def test_leaderboard_tinh_tu_answers_va_gioi_han_10(seeded):
     assert len(board) == 10
     # Bằng điểm thì đồng hạng: hai người 300 cùng hạng 3, người sau là hạng 5.
     assert [entry["rank"] for entry in board] == [1, 2, 3, 3, 5, 6, 7, 8, 9, 10]
+    # Phòng đang ở câu 1 (còn mở): 100 điểm của p01 ở câu 1 chưa được cộng.
     assert [entry["score"] for entry in board] == [
-        600, 400, 300, 300, 250, 200, 150, 100, 50, 0
+        500, 400, 300, 300, 250, 200, 150, 100, 50, 0
     ]
-    assert board[0] == {"nickname": "Người 01", "score": 600, "rank": 1}
+    assert board[0] == {"nickname": "Người 01", "score": 500, "rank": 1}
     assert "Người 11" not in [entry["nickname"] for entry in board]
     assert "Người 12" not in [entry["nickname"] for entry in board]
 
@@ -273,13 +274,33 @@ def test_state_question_player(seeded, fake_game):
     first = views.build_state(CODE, "player", "tok01")
     last = views.build_state(CODE, "player", "tok12")
 
-    assert first["you"] == {"score": 600, "rank": 1, "answered_current": True}
+    # Đã trả lời câu đang mở nhưng điểm câu đó chưa hiện (không lộ đúng/sai).
+    assert first["you"] == {"score": 500, "rank": 1, "answered_current": True}
     # Hạng tính trên cả phòng; Người 10, 11, 12 cùng 0 điểm nên đồng hạng 10.
     assert last["you"] == {"score": 0, "rank": 10, "answered_current": False}
     assert len(first["leaderboard"]) == 10
     assert "players" not in first
     assert "answered" not in first
     assert not _find_forbidden(first)
+
+
+def test_state_diem_theo_cung_lan_doc_trang_thai(seeded, fake_game, monkeypatch):
+    # Race: build_state đọc phòng lúc còn "question", rồi câu 1 đóng ngay sau.
+    # Điểm phải khớp với status trả về, không được cộng câu 1 vào.
+    stale = {"status": "question", "current_index": 1}
+    monkeypatch.setattr(game, "get_room", lambda code: stale, raising=False)
+    connection = db.connect()
+    try:
+        connection.execute("UPDATE rooms SET status = 'reveal' WHERE code = ?", (CODE,))
+        connection.commit()
+    finally:
+        connection.close()
+
+    state = views.build_state(CODE, "player", "tok01")
+
+    assert state["status"] == "question"
+    assert state["you"]["score"] == 500
+    assert state["leaderboard"][0]["score"] == 500
 
 
 def test_state_reveal_co_dap_an(seeded, fake_game):

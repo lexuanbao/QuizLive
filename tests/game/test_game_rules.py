@@ -11,6 +11,7 @@ from _game_support import (
     join,
     next_q,
     set_opened_at,
+    sql,
     start,
     state,
 )
@@ -31,14 +32,34 @@ def test_tra_loi_lan_hai_tra_409_va_diem_khong_doi(client, db_file):
 
     set_opened_at(db_file, qid, 4)
     assert answer(client, code, tokens["Nam"], qid, right).status_code == 200
-    before = state(client, code, "player", tokens["Nam"])["you"]["score"]
-    assert before == scoring.points_for(True, 4)
+    stored = "SELECT points FROM answers WHERE question_id = ?"
+    before = [r["points"] for r in sql(db_file, stored, (qid,))]
+    assert before == [scoring.points_for(True, 4)]
 
     again = answer(client, code, tokens["Nam"], qid, (right + 1) % 4)
     assert again.status_code == 409
+    assert [r["points"] for r in sql(db_file, stored, (qid,))] == before
     you = state(client, code, "player", tokens["Nam"])["you"]
-    assert you["score"] == before
+    # Câu còn mở (Lan chưa trả lời) nên điểm chưa hiện, tránh lộ đúng/sai.
+    assert you["score"] == 0
     assert you["answered_current"] is True
+
+
+def test_cau_dang_mo_khong_lo_diem_cho_toi_khi_reveal(client, db_file):
+    room, tokens, question = _started(client)
+    code, qid = room["code"], question["id"]
+    right = correct_index(db_file, qid)
+
+    set_opened_at(db_file, qid, 2)
+    assert answer(client, code, tokens["Nam"], qid, right).status_code == 200
+    open_state = state(client, code, "player", tokens["Lan"])
+    assert open_state["status"] == "question"
+    assert all(e["score"] == 0 for e in open_state["leaderboard"])
+
+    assert answer(client, code, tokens["Lan"], qid, (right + 1) % 4).status_code == 200
+    revealed = state(client, code, "player", tokens["Nam"])
+    assert revealed["status"] == "reveal"
+    assert revealed["you"]["score"] == scoring.points_for(True, 2)
 
 
 def test_bang_diem_thi_dong_hang(client, db_file):
