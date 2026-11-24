@@ -1,8 +1,8 @@
 # Trạng thái hiện tại
 
-Đang ở: Bước 4 — cả 4 sóng xong; người dùng đã chơi thử trên trình duyệt và thấy ổn
-Đã xong: sóng 0, 1, 2, 3; 111 test xanh
-Đang làm: chưa có việc mở
+Đang ở: Bước 5 — xong code, chơi thử với AI thật ổn; tiếp theo deploy lên Railway
+Đã xong: sóng 0, 1, 2, 3; leak-hunter; AI thật qua OpenRouter; 115 test xanh
+Đang làm: chuẩn bị deploy (README bước 9)
 Quyết định vừa chốt: bằng điểm thì đồng hạng (1, 2, 2, 4), đã ghi vào CONTRACT
 
 ---
@@ -24,6 +24,17 @@ cho lead, lead ghi lại. Nhiều agent cùng sửa một file sẽ ghi đè lê
 | 3 | Người 6 | Test chơi trọn ván qua API | `tests/game/` xanh |
 
 ## Nhật ký
+
+### 2026-11-25 — lead — chọn model, chơi thử AI thật
+Đã làm: so 4 model miễn phí có structured outputs trên OpenRouter; người dùng
+giữ model hiện tại trong cấu hình của họ. `generator._strip_letters` bỏ tiền tố
+"A. ", "B) " model tự thêm (xáo xong sẽ lệch chữ cái trên giao diện), prompt
+dặn không ghi chữ cái. Người dùng chơi thử với AI thật qua LAN, ổn.
+Quyết định: không thêm giới hạn tạo phòng theo IP hay model dự phòng lúc này.
+Người tiếp theo cần biết: khi deploy công khai, model miễn phí bị giới hạn
+20 request/phút và 50/ngày (1.000/ngày nếu đã nạp từ 10 USD); ai cũng tạo
+phòng được nên dễ hết lượt — cân nhắc giới hạn theo IP. Đặt `PUBLIC_BASE_URL`
+bằng domain Railway để mã QR đúng. Docker chưa chạy được trên máy này (WSL2).
 
 ### 2026-11-25 — lead — AI thật, chặn .env, leak-hunter
 Đã làm: `backend/app.py` nạp `.env` bằng `load_dotenv` (không ghi đè biến

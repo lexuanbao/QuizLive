@@ -126,6 +126,28 @@ def test_collect_tolerates_wrong_shape(payload):
     assert generator._collect(payload) == []
 
 
+def test_collect_bo_tien_to_chu_cai_cua_lua_chon():
+    item = {
+        "text": "Nhà Lý thành lập năm nào?",
+        "choices": ["A. 1009", "B) 1010", "(C) 1225", "d: 938"],
+        "correct_index": 0,
+        "explanation": "Năm 1009.",
+    }
+    assert generator._collect({"questions": [item]})[0]["choices"] == [
+        "1009", "1010", "1225", "938"
+    ]
+
+
+def test_collect_giu_nguyen_khi_chi_mot_lua_chon_giong_tien_to():
+    item = {
+        "text": "Vitamin nào tan trong dầu?",
+        "choices": ["A. retinol", "Vitamin C", "Vitamin B1", "Vitamin B12"],
+        "correct_index": 0,
+        "explanation": "Vitamin A tan trong dầu.",
+    }
+    assert generator._collect({"questions": [item]})[0]["choices"][0] == "A. retinol"
+
+
 def test_merge_dedupes_by_normalised_text_and_caps_at_five():
     batch = [_question(text=f"Câu {i}") for i in range(4)]
     duplicate = _question(text="  câu   0 ")
