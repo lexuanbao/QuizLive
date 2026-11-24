@@ -1,9 +1,9 @@
 # Trạng thái hiện tại
 
-Đang ở: Bước 2 — sóng 1 xong, sẵn sàng mở sóng 2 và 3
-Đã xong: sóng 0 (nền) và sóng 1 (luật chơi, điểm, state, bảng xếp hạng, sinh câu hỏi); đủ 9 endpoint trong CONTRACT
-Đang làm: chưa có ai; sóng 2 (frontend) và sóng 3 (`tests/game/`) chưa bắt đầu
-Quyết định vừa chốt: `tests/invariants/` được khoá bằng `permissions.deny` và hook PreToolUse trong `.claude/settings.json`
+Đang ở: Bước 3 — sóng 2 và 3 xong về code, chờ chơi thử trên trình duyệt thật
+Đã xong: sóng 0, 1, 2 (màn hình host và người chơi), 3 (`tests/game/`); 110 test xanh
+Đang làm: người thật chơi thử một ván (máy chiếu + điện thoại) để chốt sóng 2
+Quyết định vừa chốt: bằng điểm vẫn xếp hạng khác nhau (1, 2) vì SPEC không quy định; chờ người dùng quyết
 
 ---
 
@@ -24,6 +24,22 @@ cho lead, lead ghi lại. Nhiều agent cùng sửa một file sẽ ghi đè lê
 | 3 | Người 6 | Test chơi trọn ván qua API | `tests/game/` xanh |
 
 ## Nhật ký
+
+### 2026-11-24 — lead — sóng 2 và 3 (3 agent song song)
+Đã làm: lead viết trước `app.js` (api, poll, store, el, show) và `style.css`
+(biến màu, `.choice-0..3`) để hai agent frontend không sửa chung file.
+Người 4 viết `host.html`, Người 5 viết `play.html` (mỗi trang tự chứa
+`<style>` và `<script>`), Người 6 viết `tests/game/` (6 test: trọn 5 câu khớp
+điểm tính tay, 409 lần hai, hết giờ, 403, 404). Lead sửa: nút "Câu tiếp" bị
+poll bật lại khi đang gửi; người chơi bấm lúc câu vừa đóng (409
+`question_closed`) bị tính là đã chọn. Kiểm tra: `pytest tests` 110 passed;
+`node --check` hai script; chạy trọn một ván qua HTTP thật với mock.
+Quyết định: frontend chưa mở bằng trình duyệt thật — sóng 2 chỉ coi là xong
+khi người chơi thử. Bằng điểm thì rank theo thứ tự `views._ranking` (1, 2).
+Người tiếp theo cần biết: `backend.app` gọi `db.init_db()` lúc import, nên
+fixture `tests/game` xoá `backend.app` khỏi `sys.modules` mỗi test; chuyển
+`init_db()` vào lifespan sẽ bền hơn. Đổi thiết bị giữa ván thì màn hình người
+chơi không biết đã chọn gì (server không trả lựa chọn) và hiện "Hết giờ".
 
 ### 2026-11-24 — lead — chốt sóng 1, chuẩn bị sóng 2 và 3
 Đã làm: kiểm tra sóng 1 — `game.py`, `scoring.py`, `views.py`, `generator.py`,

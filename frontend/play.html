@@ -5,12 +5,227 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>QuizLive — Người chơi</title>
   <link rel="stylesheet" href="/static/style.css">
+  <style>
+    body { max-width: 480px; margin: 0 auto; min-height: 100vh; text-align: center; }
+    h1 { margin: 0.2em 0 0.6em; }
+    form { display: flex; flex-direction: column; gap: 0.8rem; }
+    form input { font-size: 1.2rem; text-align: center; }
+    #code-input { text-transform: uppercase; letter-spacing: 0.2em; }
+    form button { font-size: 1.2rem; }
+    .big { font-size: 1.6rem; font-weight: 700; }
+    .muted { color: var(--muted); }
+    #q-head { display: flex; justify-content: space-between; font-weight: 700; }
+    #q-timer { font-size: 1.4rem; }
+    #q-text { font-size: 1rem; margin: 0.5rem 0; }
+    #choices {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;
+      height: calc(100vh - 12rem); min-height: 16rem;
+    }
+    #choices button {
+      font-size: 1.1rem; padding: 0.5em; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 0.3em; word-break: break-word;
+    }
+    #choices button b { font-size: 1.8rem; }
+    #choices button:disabled { opacity: 1; }
+    #choices.locked button { opacity: 0.3; }
+    #choices.locked button.picked { opacity: 1; outline: 4px solid var(--ink); }
+    #q-status { min-height: 1.5em; font-weight: 700; margin-top: 0.5rem; }
+    .right { color: #1e8449; }
+    .wrong { color: var(--a); }
+  </style>
 </head>
 <body>
-  <main>
-    <h1>QuizLive</h1>
-    <p>Màn hình người chơi. Người 5 phụ trách.</p>
-  </main>
+  <h1>QuizLive</h1>
+
+  <section id="join">
+    <form id="join-form">
+      <input id="code-input" maxlength="6" placeholder="Mã phòng" autocomplete="off">
+      <input id="nick-input" maxlength="20" placeholder="Nickname" autocomplete="off">
+      <button type="submit">Vào phòng</button>
+      <p id="join-error" class="error"></p>
+    </form>
+  </section>
+
+  <section id="lobby" hidden>
+    <p class="big" id="lobby-nick"></p>
+    <p>Đã vào phòng, chờ host bắt đầu.</p>
+  </section>
+
+  <section id="question" hidden>
+    <div id="q-head"><span id="q-index"></span><span id="q-timer"></span></div>
+    <p id="q-text"></p>
+    <div id="choices"></div>
+    <p id="q-status"></p>
+  </section>
+
+  <section id="reveal" hidden>
+    <p class="big" id="r-result"></p>
+    <p class="big" id="r-points"></p>
+    <p id="r-explain" class="muted"></p>
+    <p id="r-rank"></p>
+  </section>
+
+  <section id="finished" hidden>
+    <p>Kết thúc</p>
+    <p class="big" id="f-rank"></p>
+    <p class="big" id="f-score"></p>
+  </section>
+
   <script src="/static/app.js"></script>
+  <script>
+    const SCREENS = ["join", "lobby", "question", "reveal", "finished"];
+    let code = (new URLSearchParams(location.search).get("code") || "").toUpperCase();
+    let token = null;
+    let stopPoll = null;
+    let currentQ = null;   // id câu đang hiển thị
+    let sending = false;
+
+    function screen(name) { SCREENS.forEach(s => show(s, s === name)); }
+    function key(name) { return name + ":" + code; }
+
+    // Lựa chọn và điểm trước câu, lưu theo câu để F5 không mất.
+    function picked(qid) { const v = store(key("pick:" + qid)); return v === null ? null : Number(v); }
+    function baseScore(qid) { const v = store(key("base:" + qid)); return v === null ? null : Number(v); }
+
+    // --- Vào phòng ---
+    el("code-input").value = code;
+    el("code-input").addEventListener("input", e => { e.target.value = e.target.value.toUpperCase(); });
+
+    el("join-form").addEventListener("submit", async e => {
+      e.preventDefault();
+      code = el("code-input").value.trim().toUpperCase();
+      const nickname = el("nick-input").value.trim();
+      el("join-error").textContent = "";
+      if (!code || !nickname) { el("join-error").textContent = "Nhập mã phòng và nickname"; return; }
+      const r = await api("POST", `/api/rooms/${code}/players`, { body: { nickname } });
+      if (r.ok) {
+        token = r.data.player_token;
+        store(key("token"), token);
+        store(key("nick"), nickname);
+        history.replaceState(null, "", "/play?code=" + code);
+        start();
+      } else {
+        el("join-error").textContent =
+          r.status === 404 ? "Không tìm thấy phòng" :
+          r.status === 409 ? "Tên đã có người dùng" :
+          r.status === 422 ? "Dữ liệu không hợp lệ" : "Lỗi kết nối, thử lại";
+      }
+    });
+
+    // --- Vòng hỏi trạng thái ---
+    function start() {
+      el("lobby-nick").textContent = store(key("nick")) || "";
+      if (stopPoll) stopPoll();
+      stopPoll = poll(tick, 1000);
+    }
+
+    async function tick() {
+      const r = await api("GET", `/api/rooms/${code}/state?role=player`,
+        { headers: { "X-Player-Token": token } });
+      if (r.status === 403 || r.status === 404) {   // token cũ hoặc phòng không còn
+        store(key("token"), null);
+        stopPoll();
+        el("join-error").textContent = r.status === 404 ? "Không tìm thấy phòng" : "Hãy vào lại phòng";
+        screen("join");
+        return;
+      }
+      if (r.ok) render(r.data);
+    }
+
+    function render(s) {
+      if (s.status === "lobby") screen("lobby");
+      else if (s.status === "question") renderQuestion(s.question, s.you);
+      else if (s.status === "reveal") renderReveal(s);
+      else if (s.status === "finished") renderFinished(s.you);
+    }
+
+    // --- Câu hỏi ---
+    function renderQuestion(q, you) {
+      screen("question");
+      if (q.id !== currentQ) {
+        currentQ = q.id;
+        if (baseScore(q.id) === null) store(key("base:" + q.id), you.score);
+        el("q-index").textContent = `Câu ${q.index + 1}/${q.total}`;
+        el("q-text").textContent = q.text;
+        el("choices").innerHTML = "";
+        q.choices.forEach((text, i) => {
+          const b = document.createElement("button");
+          b.className = "choice-" + i;
+          b.innerHTML = `<b>${LETTERS[i]}</b><span></span>`;
+          b.querySelector("span").textContent = text;
+          b.addEventListener("click", () => answer(q.id, i));
+          el("choices").appendChild(b);
+        });
+        el("q-status").textContent = "";
+        setLocked(false, null);
+      }
+      el("q-timer").textContent = q.seconds_left + "s";
+      if (you.answered_current && !sending) {
+        setLocked(true, picked(q.id));
+        el("q-status").textContent = "Đã ghi nhận";
+      }
+    }
+
+    function setLocked(locked, choice) {
+      el("choices").classList.toggle("locked", locked);
+      [...el("choices").children].forEach((b, i) => {
+        b.disabled = locked;
+        b.classList.toggle("picked", locked && i === choice);
+      });
+    }
+
+    async function answer(qid, choice) {
+      if (sending) return;
+      sending = true;
+      setLocked(true, choice);
+      el("q-status").textContent = "Đã ghi nhận";
+      store(key("pick:" + qid), choice);
+      const r = await api("POST", `/api/rooms/${code}/answers`, {
+        body: { question_id: qid, choice_index: choice },
+        headers: { "X-Player-Token": token },
+      });
+      sending = false;
+      if (r.ok) return;
+      if (r.status === 409) {   // giữ khoá; câu đã đóng thì lựa chọn không được ghi
+        if (r.data && r.data.detail === "question_closed") {
+          store(key("pick:" + qid), null);
+          el("q-status").textContent = "Hết giờ";
+        }
+        return;
+      }
+      store(key("pick:" + qid), null);
+      if (qid === currentQ) {
+        setLocked(false, null);
+        el("q-status").textContent = "Gửi lỗi, chọn lại";
+      }
+    }
+
+    // --- Đáp án ---
+    function renderReveal(s) {
+      screen("reveal");
+      const qid = s.question ? s.question.id : currentQ;
+      const pick = qid ? picked(qid) : null;
+      const right = pick !== null && pick === s.reveal.correct_index;
+      const res = el("r-result");
+      res.textContent = pick === null ? "Hết giờ" : right ? "Đúng" : "Sai";
+      res.className = "big " + (right ? "right" : "wrong");
+      const base = qid ? baseScore(qid) : null;
+      const gained = base === null ? 0 : Math.max(0, s.you.score - base);
+      el("r-points").textContent = "+" + gained + " điểm";
+      el("r-explain").textContent =
+        `Đáp án ${LETTERS[s.reveal.correct_index]}. ${s.reveal.explanation || ""}`;
+      el("r-rank").textContent = `Hạng ${s.you.rank} — Tổng ${s.you.score} điểm`;
+    }
+
+    function renderFinished(you) {
+      screen("finished");
+      el("f-rank").textContent = "Hạng " + you.rank;
+      el("f-score").textContent = you.score + " điểm";
+    }
+
+    // --- Khởi động: dùng lại token nếu đã vào phòng này ---
+    token = code ? store(key("token")) : null;
+    if (token) start(); else screen("join");
+  </script>
 </body>
 </html>

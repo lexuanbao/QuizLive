@@ -1,0 +1,102 @@
+"""Cac luat ngan qua API: tra loi lan hai, het gio, sai token, phong khong ton tai."""
+
+from __future__ import annotations
+
+from backend import scoring
+
+from _game_support import (
+    answer,
+    correct_index,
+    create_room,
+    join,
+    next_q,
+    set_opened_at,
+    start,
+    state,
+)
+
+
+def _started(client, nicknames=("Nam", "Lan")):
+    room = create_room(client)
+    tokens = {n: join(client, room["code"], n)["player_token"] for n in nicknames}
+    assert start(client, room["code"], room["host_token"]).status_code == 200
+    question = state(client, room["code"], "host", room["host_token"])["question"]
+    return room, tokens, question
+
+
+def test_tra_loi_lan_hai_tra_409_va_diem_khong_doi(client, db_file):
+    room, tokens, question = _started(client)
+    code, qid = room["code"], question["id"]
+    right = correct_index(db_file, qid)
+
+    set_opened_at(db_file, qid, 4)
+    assert answer(client, code, tokens["Nam"], qid, right).status_code == 200
+    before = state(client, code, "player", tokens["Nam"])["you"]["score"]
+    assert before == scoring.points_for(True, 4)
+
+    again = answer(client, code, tokens["Nam"], qid, (right + 1) % 4)
+    assert again.status_code == 409
+    you = state(client, code, "player", tokens["Nam"])["you"]
+    assert you["score"] == before
+    assert you["answered_current"] is True
+
+
+def test_het_gio_request_tiep_theo_thay_reveal_va_tra_loi_bi_409(client, db_file):
+    room, tokens, question = _started(client)
+    code, qid = room["code"], question["id"]
+
+    set_opened_at(db_file, qid, 25)
+    after = state(client, code, "player", tokens["Lan"])
+    assert after["status"] == "reveal"
+    assert after["reveal"]["correct_index"] == correct_index(db_file, qid)
+
+    late = answer(client, code, tokens["Lan"], qid, 0)
+    assert late.status_code == 409
+    assert state(client, code, "player", tokens["Lan"])["you"]["score"] == 0
+
+
+def test_het_gio_chan_ca_cau_tra_loi_dau_tien(client, db_file):
+    room, tokens, question = _started(client)
+    set_opened_at(db_file, question["id"], 25)
+    late = answer(client, room["code"], tokens["Nam"], question["id"], 0)
+    assert late.status_code == 409
+
+
+def test_sai_token_tra_403(client):
+    room, tokens, question = _started(client)
+    code = room["code"]
+
+    assert start(client, code, "sai").status_code == 403
+    assert next_q(client, code, "sai").status_code == 403
+    assert answer(client, code, "sai", question["id"], 0).status_code == 403
+    for role, header in (("host", "X-Host-Token"), ("player", "X-Player-Token")):
+        response = client.get(
+            f"/api/rooms/{code}/state", params={"role": role}, headers={header: "sai"}
+        )
+        assert response.status_code == 403
+    # Token nguoi choi khong dung duoc cho vai host.
+    response = client.get(
+        f"/api/rooms/{code}/state",
+        params={"role": "host"},
+        headers={"X-Host-Token": tokens["Nam"]},
+    )
+    assert response.status_code == 403
+
+
+def test_phong_khong_ton_tai_tra_404_room_not_found(client):
+    missing = "ZZZZZZ"
+    responses = [
+        client.post(f"/api/rooms/{missing}/players", json={"nickname": "Nam"}),
+        start(client, missing, "x"),
+        next_q(client, missing, "x"),
+        answer(client, missing, "x", "q", 0),
+        client.get(
+            f"/api/rooms/{missing}/state",
+            params={"role": "host"},
+            headers={"X-Host-Token": "x"},
+        ),
+        client.get(f"/api/rooms/{missing}/qr.png"),
+    ]
+    for response in responses:
+        assert response.status_code == 404, response.request.url
+        assert response.json() == {"detail": "room_not_found"}

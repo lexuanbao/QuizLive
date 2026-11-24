@@ -5,12 +5,227 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>QuizLive</title>
   <link rel="stylesheet" href="/static/style.css">
+  <style>
+    body { font-size: 1.6rem; padding: 2rem; }
+    main { max-width: 1200px; margin: 0 auto; }
+    h1 { font-size: 3rem; margin: 0 0 1rem; }
+    .muted { color: var(--muted); }
+    .big-btn { font-size: 1.8rem; padding: 0.6em 1.6em; }
+    #create-form { display: flex; gap: 1rem; flex-wrap: wrap; }
+    #topic { flex: 1; min-width: 12em; font-size: 1.8rem; }
+    .lobby { display: flex; gap: 3rem; align-items: center; flex-wrap: wrap; }
+    .code { font-size: 9rem; font-weight: 800; letter-spacing: 0.15em; line-height: 1; }
+    #qr { width: 300px; height: 300px; background: #fff; border: 1px solid var(--line); }
+    #player-list { display: flex; flex-wrap: wrap; gap: 0.6rem; padding: 0; list-style: none; }
+    #player-list li { background: var(--card); border: 2px solid var(--line);
+                      border-radius: 0.6rem; padding: 0.3em 0.8em; }
+    .qhead { display: flex; justify-content: space-between; align-items: baseline; }
+    #timer { font-size: 5rem; font-weight: 800; }
+    #q-text { font-size: 3rem; margin: 1rem 0 1.5rem; }
+    .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .choices div { color: #fff; border-radius: 0.8rem; padding: 1.2rem 1.5rem;
+                   font-size: 2rem; font-weight: 600; transition: opacity 0.3s; }
+    .choices .choice-2 { color: var(--ink); }
+    .choices .dim { opacity: 0.25; }
+    .choices .right { outline: 6px solid var(--ink); outline-offset: 3px; }
+    #explanation { font-size: 1.8rem; margin: 1.5rem 0; }
+    table { border-collapse: collapse; width: 100%; max-width: 800px; font-size: 2rem; }
+    td { padding: 0.4em 0.6em; border-bottom: 2px solid var(--line); }
+    td:last-child { text-align: right; font-weight: 700; }
+    .row { display: flex; justify-content: space-between; align-items: center;
+           gap: 1rem; flex-wrap: wrap; margin-top: 1.5rem; }
+  </style>
 </head>
 <body>
-  <main>
+<main>
+  <section id="v-form">
     <h1>QuizLive</h1>
-    <p>Màn hình host. Người 4 phụ trách.</p>
-  </main>
-  <script src="/static/app.js"></script>
+    <form id="create-form">
+      <input id="topic" maxlength="200" placeholder="Chủ đề, ví dụ: Hệ mặt trời" required>
+      <button id="create-btn" class="big-btn" type="submit">Tạo phòng</button>
+    </form>
+    <p id="form-msg" class="muted"></p>
+  </section>
+
+  <section id="v-lobby" hidden>
+    <div class="lobby">
+      <div>
+        <div class="muted">Mã phòng</div>
+        <div id="code" class="code"></div>
+        <p>Vào <b id="join-url"></b> và nhập mã</p>
+      </div>
+      <img id="qr" alt="Mã QR vào phòng">
+    </div>
+    <h2>Người chơi (<span id="player-count">0</span>)</h2>
+    <ul id="player-list"></ul>
+    <button id="start-btn" class="big-btn" disabled>Bắt đầu</button>
+    <p id="lobby-msg" class="error"></p>
+  </section>
+
+  <section id="v-question" hidden>
+    <div class="qhead">
+      <div id="q-num" class="muted"></div>
+      <div id="timer"></div>
+    </div>
+    <div id="q-text"></div>
+    <div id="choices" class="choices"></div>
+    <div class="row">
+      <div id="answered-line" class="muted"></div>
+      <button id="next-btn" class="big-btn" hidden>Câu tiếp</button>
+    </div>
+    <div id="reveal-box" hidden>
+      <p id="explanation"></p>
+      <h2>Dẫn đầu</h2>
+      <table id="top5"></table>
+    </div>
+    <p id="q-msg" class="error"></p>
+  </section>
+
+  <section id="v-finished" hidden>
+    <h1>Bảng xếp hạng chung cuộc</h1>
+    <table id="final"></table>
+    <div class="row"><button id="new-btn" class="big-btn">Tạo phòng mới</button></div>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+<script>
+let code = store("host_code");
+let token = store("host_token");
+let stopPoll = null;
+
+const VIEWS = ["v-form", "v-lobby", "v-question", "v-finished"];
+function view(id) { VIEWS.forEach(v => show(v, v === id)); }
+function hostHeaders() { return { "X-Host-Token": token }; }
+
+function setRows(tableId, rows) {
+  const t = el(tableId);
+  t.innerHTML = "";
+  rows.forEach(r => {
+    const tr = t.insertRow();
+    [r.rank + ".", r.nickname, r.score].forEach(v => { tr.insertCell().textContent = v; });
+  });
+  if (!rows.length) t.insertRow().insertCell().textContent = "Chưa có ai ghi điểm.";
+}
+
+function showForm(msg) {
+  if (stopPoll) stopPoll();
+  stopPoll = null;
+  code = token = null;
+  store("host_code", null);
+  store("host_token", null);
+  el("form-msg").textContent = msg || "";
+  el("form-msg").className = msg ? "error" : "muted";
+  el("create-btn").disabled = false;
+  view("v-form");
+}
+
+function enterRoom() {
+  el("code").textContent = code;
+  el("qr").src = "/api/rooms/" + code + "/qr.png";
+  el("join-url").textContent = location.origin + "/play";
+  if (stopPoll) stopPoll();
+  stopPoll = poll(refresh, 1000);
+}
+
+el("create-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const topic = el("topic").value.trim();
+  if (!topic) return;
+  el("create-btn").disabled = true;
+  el("form-msg").className = "muted";
+  el("form-msg").textContent = "Đang tạo phòng, AI đang soạn câu hỏi...";
+  const r = await api("POST", "/api/rooms", { body: { topic } });
+  el("create-btn").disabled = false;
+  if (!r.ok) {
+    const msgs = {
+      422: "Chủ đề không hợp lệ (cần từ 1 đến 200 ký tự).",
+      503: "Chưa sinh được câu hỏi: dịch vụ AI không sẵn sàng. Thử lại sau.",
+      0: "Không kết nối được máy chủ.",
+    };
+    el("form-msg").className = "error";
+    el("form-msg").textContent = msgs[r.status] || "Lỗi tạo phòng (" + r.status + ").";
+    return;
+  }
+  code = store("host_code", r.data.code);
+  token = store("host_token", r.data.host_token);
+  el("form-msg").textContent = "";
+  enterRoom();
+});
+
+let busy = false;  // dang gui start/next: poll khong duoc bat lai nut
+async function control(action, btnId, msgId) {
+  if (busy) return;
+  busy = true;
+  el(btnId).disabled = true;
+  const r = await api("POST", "/api/rooms/" + code + "/" + action, { headers: hostHeaders() });
+  el(msgId).textContent = r.ok ? "" : "Không thực hiện được (" + r.status + ").";
+  busy = false;
+  if (r.ok) await refresh();
+  else el(btnId).disabled = false;
+}
+el("start-btn").onclick = () => control("start", "start-btn", "lobby-msg");
+el("next-btn").onclick = () => control("next", "next-btn", "q-msg");
+el("new-btn").onclick = () => { el("topic").value = ""; showForm(); };
+
+async function refresh() {
+  if (!code) return;
+  const r = await api("GET", "/api/rooms/" + code + "/state?role=host", { headers: hostHeaders() });
+  if (r.status === 404 || r.status === 403) return showForm("Phòng cũ không còn dùng được.");
+  if (!r.ok) return;  // loi mang tam thoi: giu man hinh, thu lai lan sau
+  render(r.data);
+}
+
+function render(s) {
+  if (s.status === "lobby") return renderLobby(s);
+  if (s.status === "finished") {
+    setRows("final", s.leaderboard);
+    return view("v-finished");
+  }
+  renderQuestion(s);
+}
+
+function renderLobby(s) {
+  const players = s.players || [];
+  el("player-count").textContent = players.length;
+  const list = el("player-list");
+  list.innerHTML = "";
+  players.forEach(n => { const li = document.createElement("li"); li.textContent = n; list.appendChild(li); });
+  el("start-btn").disabled = players.length === 0;
+  view("v-lobby");
+}
+
+function renderQuestion(s) {
+  const q = s.question;
+  if (!q) return;
+  const revealed = s.status === "reveal" && s.reveal;
+  const right = revealed ? s.reveal.correct_index : -1;
+  el("q-num").textContent = "Câu " + (q.index + 1) + "/" + q.total;
+  el("timer").textContent = revealed ? "" : q.seconds_left;
+  el("q-text").textContent = q.text;
+
+  const box = el("choices");
+  box.innerHTML = "";
+  q.choices.forEach((c, i) => {
+    const d = document.createElement("div");
+    d.className = "choice-" + i + (revealed ? (i === right ? " right" : " dim") : "");
+    d.textContent = LETTERS[i] + ". " + c;
+    box.appendChild(d);
+  });
+
+  el("answered-line").textContent = s.answered + "/" + (s.players || []).length + " người đã trả lời";
+  show("reveal-box", !!revealed);
+  show("next-btn", !!revealed);
+  if (revealed) {
+    el("explanation").textContent = s.reveal.explanation || "";
+    setRows("top5", s.leaderboard.slice(0, 5));
+    el("next-btn").textContent = q.index + 1 >= q.total ? "Xem kết quả" : "Câu tiếp";
+    el("next-btn").disabled = busy;
+  }
+  view("v-question");
+}
+
+if (code && token) enterRoom(); else showForm();
+</script>
 </body>
 </html>
