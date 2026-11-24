@@ -1,0 +1,11 @@
+/* Dùng chung cho host và người chơi. Người 4 phụ trách. */
+
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  padding: 2rem;
+}
+
+h1 {
+  font-size: 2rem;
+}
