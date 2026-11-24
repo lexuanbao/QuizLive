@@ -1,11 +1,51 @@
-/* Dùng chung cho host và người chơi. Người 4 phụ trách. */
+/* Dung chung cho host va nguoi choi. Rieng tung trang thi dat trong <style> cua trang do. */
+
+:root {
+  --a: #e74c3c;
+  --b: #3498db;
+  --c: #f1c40f;
+  --d: #2ecc71;
+  --ink: #1d2330;
+  --muted: #6b7280;
+  --bg: #f7f7f5;
+  --card: #ffffff;
+  --line: #e2e2dd;
+}
+
+* { box-sizing: border-box; }
 
 body {
-  font-family: system-ui, sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   margin: 0;
-  padding: 2rem;
+  padding: 1rem;
+  background: var(--bg);
+  color: var(--ink);
 }
 
-h1 {
-  font-size: 2rem;
+[hidden] { display: none !important; }
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 0;
+  border-radius: 0.6rem;
+  padding: 0.7em 1.2em;
+  background: var(--ink);
+  color: #fff;
 }
+
+button:disabled { opacity: 0.5; cursor: default; }
+
+input {
+  font: inherit;
+  padding: 0.6em 0.8em;
+  border: 2px solid var(--line);
+  border-radius: 0.6rem;
+}
+
+.error { color: var(--a); }
+
+.choice-0 { background: var(--a); }
+.choice-1 { background: var(--b); }
+.choice-2 { background: var(--c); color: var(--ink); }
+.choice-3 { background: var(--d); }
